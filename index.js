@@ -8,6 +8,8 @@ const multer = require('multer')
 const mysql = require('mysql')
 const ECT = require('ect')
 const promisify = require('es6-promisify')
+const redis = require('redis')
+const bluebird = require('bluebird')
 
 const STATIC_FOLDER = path.join(__dirname, '..', 'public')
 const ICONS_FOLDER = path.join(STATIC_FOLDER, 'icons')
