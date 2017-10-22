@@ -36,7 +36,8 @@ app.use((err, req, res, next) => {
 
 const pool = mysql.createPool({
   connectionLimit: 20,
-  host: process.env.ISUBATA_DB_HOST || 'localhost',
+//  host: process.env.ISUBATA_DB_HOST || 'localhost',
+  host:  'localhost',
   port: process.env.ISUBATA_DB_PORT || '3306',
   user: process.env.ISUBATA_DB_USER || 'root',
   password: process.env.ISUBATA_DB_PASSWORD || '',
@@ -166,7 +167,7 @@ function getLogin(req, res) {
 
 app.post('/login', postLogin)
 function postLogin(req, res) {
-  return pool.query('SELECT * FROM user WHERE name = ?', [req.body.name])
+  return pool.query('SELECT salt, password, id FROM user WHERE name = ?', [req.body.name])
     .then(([row]) => {
       if (!row) {
         res.status(403).end()
@@ -283,7 +284,7 @@ function fetchUnread(req, res) {
       let p = Promise.resolve()
 
       channelIds.forEach(channelId => {
-        p = p.then(() => pool.query('SELECT * FROM haveread WHERE user_id = ? AND channel_id = ?', [userId, channelId]))
+        p = p.then(() => pool.query('SELECT message_id FROM haveread WHERE user_id = ? AND channel_id = ?', [userId, channelId]))
           .then(([row]) => {
             if (row) {
               return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, row.message_id])
@@ -463,7 +464,7 @@ function ext2mime(ext) {
 app.get('/icons/:fileName', getIcon)
 function getIcon(req, res) {
   const { fileName } = req.params
-  return pool.query('SELECT * FROM image WHERE name = ?', [fileName])
+  return pool.query('SELECT data FROM image WHERE name = ?', [fileName])
     .then(([row]) => {
       const ext = path.extname(fileName) || ''
       const mime = ext2mime(ext)
