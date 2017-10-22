@@ -35,9 +35,11 @@ app.use((err, req, res, next) => {
   res.status(500).end()
 })
 
+// mysql
 const pool = mysql.createPool({
   connectionLimit: 20,
-  host: process.env.ISUBATA_DB_HOST || 'localhost',
+//  host: process.env.ISUBATA_DB_HOST || 'localhost',
+  host:  'localhost',
   port: process.env.ISUBATA_DB_PORT || '3306',
   user: process.env.ISUBATA_DB_USER || 'root',
   password: process.env.ISUBATA_DB_PASSWORD || '',
@@ -46,6 +48,9 @@ const pool = mysql.createPool({
 })
 pool.query = promisify(pool.query, pool)
 
+//redis
+const client = redis.createClient({detect_buffers: true, path: "/run/redis/redis.sock"})
+
 app.get('/initialize', getInitialize)
 function getInitialize(req, res) {
   return pool.query('DELETE FROM user WHERE id > 1000')
@@ -53,6 +58,12 @@ function getInitialize(req, res) {
     .then(() => pool.query('DELETE FROM channel WHERE id > 10'))
     .then(() => pool.query('DELETE FROM message WHERE id > 10000'))
     .then(() => pool.query('DELETE FROM haveread'))
+    .then(() => pool.query('SELECT name,data FROM image'))
+    .then( (rows) => {
+      rows.map( x => {
+        client.set(x.name, x.data)
+      })
+    })
     .then(() => res.status(204).send(''))
 }
 
@@ -462,19 +473,34 @@ function ext2mime(ext) {
 }
 
 app.get('/icons/:fileName', getIcon)
-function getIcon(req, res) {
+async function getIcon(req, res) {
   const { fileName } = req.params
-  return pool.query('SELECT * FROM image WHERE name = ?', [fileName])
-    .then(([row]) => {
-      const ext = path.extname(fileName) || ''
-      const mime = ext2mime(ext)
+  const ext = path.extname(fileName) || ''
+  const mime = ext2mime(ext)
+  let cache
+  if ( cache = await promisify(client.get, fileName) ) { 
+  return pool.query('SELECT * FROM image WHERE name = ?', [fileName]) .then( ([row]) => {
       if (!row || !mime) {
-        res.status(404).end()
-        return
+        return Promise.reject("err")
       }
       res.header({ 'Content-Type': mime }).end(row.data)
-    })
+      return Promise.resolve(row.data)
+    }).then( (data) => {
+      client.set(fileName, data)
+    }).catch( (err) => {
+      console.log(err)
+      res.status(404).end()
+    } )
+  } else {
+      console.error("error ")
+      console.log(cache)
+      res.header({ 'Content-Type': mime }).end(cache)
+  }
 }
+
+process.on("exit", function(){
+      client.quit();
+})
 
 app.listen(PORT, () => {
   console.log('Example app listening on port ' + PORT + '!')
